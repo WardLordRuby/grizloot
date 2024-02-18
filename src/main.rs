@@ -1,13 +1,12 @@
 use clap::{
-    error::{Error, ErrorKind},
+    error::{ContextKind, ContextValue, Error, ErrorKind},
     ArgMatches, Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum,
 };
-use std::str::FromStr;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
-    /// Settings (use 'Subcommand' to nest further commands)
+    /// Nested layer of optional subcommands
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -35,7 +34,7 @@ enum Commands {
         #[arg(short, long)]
         remove: bool,
 
-        /// The platform
+        /// Epic is [Default]
         #[arg(value_enum)]
         platform: Platform,
     },
@@ -51,35 +50,34 @@ enum Platform {
     PsPlus,
 }
 
-fn main() {
+fn main() -> Result<(), clap::Error> {
     let cli = Cli::parse();
     if cli.command.is_some() {
         match cli.command.unwrap() {
             Commands::CreateReminder {} => println!("Setting reminder on device"),
-            Commands::Fetch { all } => {
-                if all {
-                    println!("Fetching free games from all platforms")
-                } else {
-                    println!("Fetching new games")
-                }
-            }
+            Commands::Fetch { all } => match all {
+                true => println!("Fetching free games from all platforms"),
+                false => println!("Fetching new games"),
+            },
             Commands::Platform {
                 add,
                 remove,
                 platform,
-            } => {
-                let mut default_add = false;
-                if !add && !remove {
-                    default_add = true
-                };
-                if add || default_add {
-                    println!("Adding {:?} to your saved preferences", platform);
-                } else {
-                    println!("Removing {:?} from your saved preferences", platform);
+            } => match (add, remove) {
+                (true, true) => {
+                    clap::Error::raw(
+                            ErrorKind::ArgumentConflict,
+                            "[Argument Conflict] Can not use `add` and `remove` arguments at the same time. ",
+                        )
+                        .exit();
                 }
-            }
+                (false, false) => println!("Adding {:?} to your saved preferences", platform),
+                (true, false) => println!("Adding {:?} to your saved preferences", platform),
+                (false, true) => println!("Removing {:?} from your saved preferences", platform),
+            },
         }
     } else {
         println!("Fetching new games")
     }
+    Ok(())
 }
